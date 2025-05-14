@@ -1,0 +1,67 @@
+logging:
+  level:
+    gorbushkabot: DEBUG
+
+spring:
+  application:
+    name: gorbushkabot
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      minimum-idle: 1
+      maximum-pool-size: 5
+      data-source-properties:
+        ApplicationName: ${spring.application.name}
+        characterEncoding: UTF-8
+  jpa:
+    generate-ddl: false
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+    table: flyway_gorbushkabot_history_table
+    baseline-on-migrate: true
+    baseline-version: 0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - info
+          - build-info
+          - prometheus
+          - threaddump
+          - flyway
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+custom:
+  bot:
+    token: ${BOT_TOKEN}
+  chats:
+    main-chat-id: ${MAIN_CHAT_ID}
+    price-chat-id: ${PRICE_CHAT_ID}
+    communication-chat-id: ${COMMUNICATION_CHAT_ID}
+  google:
+    service-account-json-resource: ${GOOGLE_CREDENTIALS_JSON_RESOURCE}
+    categories:
+      spreadsheet-id: ${CATEGORIES_SPREADSHEET_ID}
+      sheet-name: ${CATEGORIES_SHEET_NAME}
+    applications:
+      spreadsheet-id: ${APPLICATIONS_SPREADSHEET_ID}
+      sheet-name: ${APPLICATIONS_SHEET_NAME}
+    approved-applications:
+      spreadsheet-id: ${APPROVED_APPLICATIONS_SPREADSHEET_ID}
+      sheet-name: ${APPROVED_APPLICATIONS_SHEET_NAME}

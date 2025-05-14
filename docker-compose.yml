@@ -1,0 +1,28 @@
+version: '3.7'
+
+services:
+  gorbushka-bot:
+    container_name: gorbushka-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    volumes:
+      - <Путь>:/tmp/credentials.json
+    environment:
+      - DB_HOST="<Значение>"
+      - DB_PORT="<Значение>"
+      - DB_NAME="<Значение>"
+      - DB_USER="<Значение>"
+      - DB_PASSWORD="<Значение>"
+      - BOT_TOKEN="<ТОКЕН>"
+      - MAIN_CHAT_ID="<Значение>"
+      - PRICE_CHAT_ID="<Значение>"
+      - COMMUNICATION_CHAT_ID="<Значение>"
+      - GOOGLE_CREDENTIALS_JSON_RESOURCE="file:/tmp/credentials.json"
+      - CATEGORIES_SPREADSHEET_ID="<Значение>"
+      - CATEGORIES_SHEET_NAME="<Значение>"
+      - APPLICATIONS_SPREADSHEET_ID="<Значение>"
+      - APPLICATIONS_SPREADSHEET_ID="<Значение>"
+      - APPROVED_APPLICATIONS_SPREADSHEET_ID="<Значение>"
+      - APPROVED_APPLICATIONS_SPREADSHEET_ID="<Значение>"
