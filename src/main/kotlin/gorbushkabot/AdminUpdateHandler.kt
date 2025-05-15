@@ -112,7 +112,9 @@ class AdminUpdateHandler(
                 showBlackList(
                     telegramClient = telegramClient,
                     chatId = chatId,
-                    editMessageId = chatEditMessageId
+                    editMessageId = chatEditMessageId,
+                    page = 1,
+                    filter = null
                 )
 
                 deleteMessages = true
@@ -146,6 +148,23 @@ class AdminUpdateHandler(
                     deleteMessages = true
                 } else {
                     val messageId = telegramClient.sendMessage(chatId, "Пожалуйста, пришлите контакт")
+                    addMessageToDelete(chatId, messageId)
+                    deleteMessages = false
+                }
+            }
+            chatState == State.BLACK_LIST_FILTER -> {
+                if (message.text != null) {
+                    showBlackList(
+                        telegramClient = telegramClient,
+                        chatId = chatId,
+                        editMessageId = chatEditMessageId,
+                        page = 1,
+                        filter = message.text
+                    )
+
+                    deleteMessages = true
+                } else {
+                    val messageId = telegramClient.sendMessage(chatId, "Пожалуйста, пришлите текст")
                     addMessageToDelete(chatId, messageId)
                     deleteMessages = false
                 }
@@ -289,21 +308,34 @@ class AdminUpdateHandler(
                     adminId = adminId
                 )
             }
-            callbackData == "black_list" -> {
-                showBlackList(
-                    telegramClient = telegramClient,
-                    chatId = chatId,
-                    editMessageId = sourceMessageId
-                )
-            }
-            callbackData.startsWith("black_list_") -> {
-                val blackListId = callbackQuery.data.substringAfter("black_list_").toLong()
+            callbackData.startsWith("black_list_card_") -> {
+                val blackListId = callbackQuery.data.substringAfter("black_list_card_").toLong()
 
                 showBlackListCard(
                     telegramClient = telegramClient,
                     chatId = chatId,
                     editMessageId = sourceMessageId,
                     blackListId = blackListId
+                )
+            }
+            callbackData == "black_list_filter" -> {
+                handleBlackListFilter(
+                    telegramClient = telegramClient,
+                    chatId = chatId,
+                    editMessageId = sourceMessageId
+                )
+            }
+            callbackData.startsWith("black_list_") -> {
+                val splitResult = callbackQuery.data.split('_', limit = 4)
+                val page = splitResult[2].toInt()
+                val filter = splitResult.getOrNull(3)
+
+                showBlackList(
+                    telegramClient = telegramClient,
+                    chatId = chatId,
+                    editMessageId = sourceMessageId,
+                    page = page,
+                    filter = filter
                 )
             }
             callbackData == "add_to_black_list" -> {
@@ -397,7 +429,7 @@ class AdminUpdateHandler(
                 .keyboardRow(
                     InlineKeyboardRow(
                         InlineKeyboardButton.builder()
-                            .callbackData("black_list")
+                            .callbackData("black_list_1")
                             .text(MENU_BLACK_LIST_TEXT)
                             .build()
                     )
@@ -453,7 +485,7 @@ class AdminUpdateHandler(
 
         val textParts = listOfNotNull(
             "Список заявок",
-            "Cтраница: $page из $totalPages",
+            "Страница: $page из $totalPages",
             filter?.takeIf { it.isNotBlank() }?.let { "Фильтр: $it" }
         )
 
@@ -769,13 +801,7 @@ class AdminUpdateHandler(
         }
 
         pinnedMessageRepository.findAllByChatId(mainChatId).forEach { pinnedMessage ->
-            telegramClient.execute(
-                UnpinChatMessage.builder()
-                    .chatId(mainChatId)
-                    .messageId(pinnedMessage.messageId)
-                    .build()
-            )
-
+            deleteMessages(telegramClient, mainChatId, listOf(pinnedMessage.messageId))
             pinnedMessageRepository.delete(pinnedMessage)
         }
 
@@ -1023,7 +1049,13 @@ class AdminUpdateHandler(
         chatStates[chatId] = State.ADMIN_DEMOTE_SUCCESS
     }
 
-    private fun showBlackList(telegramClient: TelegramClient, chatId: Long, editMessageId: Int?) {
+    private fun showBlackList(
+        telegramClient: TelegramClient,
+        chatId: Long,
+        editMessageId: Int?,
+        page: Int,
+        filter: String?
+    ) {
         val blackList = blackListRepository.findAll()
 
         val addButton = InlineKeyboardButton.builder()
@@ -1052,34 +1084,94 @@ class AdminUpdateHandler(
             return
         }
 
+        val pageSize = 10
+
+        val filteredBlackList = blackList
+            .map { blackListElement ->
+                val getResult = telegramClient.execute(
+                    GetChatMember.builder()
+                        .chatId(blackListElement.userId)
+                        .userId(blackListElement.userId)
+                        .build()
+                )
+
+                val textParts = listOfNotNull(
+                    "\uD83D\uDC64",
+                    getResult.user.userName?.let { "@$it" },
+                    getResult.user.lastName,
+                    getResult.user.firstName
+                )
+
+                return@map blackListElement.id to textParts.joinToString(" ")
+            }
+
+            .filter { filter.isNullOrBlank() || it.second.lowercase().contains(filter.lowercase()) }
+
+        val filteredAndPagedBlackList = filteredBlackList
+            .sortedBy { it.first }
+            .drop((page - 1) * pageSize)
+            .take(pageSize)
+            .toList()
+
+        val totalPages = ceil(filteredBlackList.size.toDouble() / pageSize).toInt()
+        val showPrevious = page > 1
+        val showNext = page < totalPages
+
+        val textParts = listOfNotNull(
+            "Список заявок",
+            "Страница: $page из $totalPages",
+            filter?.takeIf { it.isNotBlank() }?.let { "Чёрный список: $it" }
+        )
+
         telegramClient.sendReplyInternal(
             chatId = chatId,
-            text = "Чёрный список:\n",
+            text = textParts.joinToString("\n"),
             editMessageId = editMessageId,
             replyMarkup = InlineKeyboardMarkup.builder()
                 .keyboard(
-                    blackList.map { blackListElement ->
-                        val getResult = telegramClient.execute(
-                            GetChatMember.builder()
-                                .chatId(blackListElement.userId)
-                                .userId(blackListElement.userId)
-                                .build()
-                        )
-
-                        val textParts = listOfNotNull(
-                            "\uD83D\uDC64",
-                            getResult.user.userName?.let { "@$it" },
-                            getResult.user.lastName,
-                            getResult.user.firstName
-                        )
-
-                        return@map InlineKeyboardRow(
+                    filteredAndPagedBlackList.map {
+                        InlineKeyboardRow(
                             InlineKeyboardButton.builder()
-                                .callbackData("black_list_${blackListElement.id}")
-                                .text(textParts.joinToString(" "))
+                                .callbackData("black_list_card_${it.first}")
+                                .text(it.second)
                                 .build()
                         )
                     }
+                )
+                .let { replyMarkupBuilder ->
+                    val buttons = mutableListOf<InlineKeyboardButton>()
+
+                    if (showPrevious) {
+                        buttons.add(
+                            InlineKeyboardButton.builder()
+                                .callbackData("black_list_${page - 1}_${filter ?: ""}")
+                                .text("⬅\uFE0F Назад")
+                                .build()
+                        )
+                    }
+
+                    if (showNext) {
+                        buttons.add(
+                            InlineKeyboardButton.builder()
+                                .callbackData("black_list_${page + 1}_${filter ?: ""}")
+                                .text("➡\uFE0F Вперед")
+                                .build()
+                        )
+                    }
+
+                    if (buttons.size == 0) {
+                        return@let replyMarkupBuilder
+                    }
+
+                    return@let replyMarkupBuilder.keyboardRow(InlineKeyboardRow(buttons))
+                }
+                .keyboardRow(
+                    InlineKeyboardRow(
+                        InlineKeyboardButton.builder()
+                            .callbackData("black_list_filter")
+                            .text("\uD83D\uDD0E Поиск")
+                            .build()
+                    )
                 )
                 .keyboardRow(InlineKeyboardRow(addButton))
                 .keyboardRow(InlineKeyboardRow(backToMenuButton))
@@ -1087,6 +1179,26 @@ class AdminUpdateHandler(
         )
 
         chatStates[chatId] = State.BLACK_LIST
+    }
+
+    private fun handleBlackListFilter(telegramClient: TelegramClient, chatId: Long, editMessageId: Int?) {
+        telegramClient.sendReplyInternal(
+            chatId = chatId,
+            text = "Введите фильтр для поиска",
+            editMessageId = editMessageId,
+            replyMarkup = InlineKeyboardMarkup.builder()
+                .keyboardRow(
+                    InlineKeyboardRow(
+                        InlineKeyboardButton.builder()
+                            .callbackData("black_list_1")
+                            .text("↩\uFE0F Вернуться в чёрный список")
+                            .build()
+                    )
+                )
+                .build()
+        )
+
+        chatStates[chatId] = State.BLACK_LIST_FILTER
     }
 
     private fun showBlackListCard(
@@ -1098,7 +1210,7 @@ class AdminUpdateHandler(
         val blackListElement = blackListRepository.findByIdOrNull(blackListId)
 
         val backToBlackListButton = InlineKeyboardButton.builder()
-            .callbackData("black_list")
+            .callbackData("black_list_1")
             .text("↩\uFE0F Вернуться в чёрный список")
             .build()
 
@@ -1161,7 +1273,7 @@ class AdminUpdateHandler(
                 .keyboardRow(
                     InlineKeyboardRow(
                         InlineKeyboardButton.builder()
-                            .callbackData("black_list")
+                            .callbackData("black_list_1")
                             .text("❌ Отмена")
                             .build()
                     )
@@ -1231,7 +1343,7 @@ class AdminUpdateHandler(
                 .keyboardRow(
                     InlineKeyboardRow(
                         InlineKeyboardButton.builder()
-                            .callbackData("black_list")
+                            .callbackData("black_list_1")
                             .text("↩\uFE0F Вернуться в чёрный список")
                             .build()
                     )
@@ -1326,6 +1438,7 @@ class AdminUpdateHandler(
         ADMIN_ADD_SUCCESS,
         ADMIN_DEMOTE_SUCCESS,
         BLACK_LIST,
+        BLACK_LIST_FILTER,
         BLACK_LIST_CARD,
         BLACK_LIST_CARD_ERROR,
         BLACK_LIST_ADD,

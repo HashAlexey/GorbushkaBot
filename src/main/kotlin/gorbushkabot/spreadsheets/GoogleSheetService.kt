@@ -4,6 +4,7 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.sheets.v4.Sheets
 import com.google.api.services.sheets.v4.SheetsScopes
+import com.google.api.services.sheets.v4.model.ClearValuesRequest
 import com.google.api.services.sheets.v4.model.ValueRange
 import com.google.auth.http.HttpCredentialsAdapter
 import com.google.auth.oauth2.ServiceAccountCredentials
@@ -24,7 +25,9 @@ class GoogleSheetService(
     @Value("\${custom.google.applications.spreadsheet-id}") private val applicationsSpreadsheetId: String,
     @Value("\${custom.google.applications.sheet-name}") private val applicationsSheetName: String,
     @Value("\${custom.google.approved-applications.spreadsheet-id}") private val approvedApplicationsSpreadsheetId: String,
-    @Value("\${custom.google.approved-applications.sheet-name}") private val approvedApplicationsSheetName: String
+    @Value("\${custom.google.approved-applications.sheet-name}") private val approvedApplicationsSheetName: String,
+    @Value("\${custom.google.black-list.spreadsheet-id}") private val blackListSpreadsheetId: String,
+    @Value("\${custom.google.black-list.sheet-name}") private val blackListSheetName: String
 ) {
 
     fun getCategories(): List<Category> {
@@ -105,6 +108,42 @@ class GoogleSheetService(
         return Sheets.Builder(transport, jsonFactory, httpRequestInitializer)
             .setApplicationName("GorbushkaBot")
             .build()
+    }
+
+    fun syncBlackList(blackList: List<Pair<Long, Instant>>) {
+        getSheets()
+            .spreadsheets()
+            .values()
+            .clear(blackListSpreadsheetId, blackListSheetName, ClearValuesRequest())
+            .execute()
+
+        val valuesRange = ValueRange()
+            .setValues(
+                listOf(
+                    listOf(
+                        "Время",
+                        "ИД пользователя"
+                    )
+                ).plus(
+                    blackList.map { blackListElement ->
+                        val tsFormatted = blackListElement.second
+                            .atZone(ZoneId.of("Europe/Moscow"))
+                            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+
+                        return@map listOf(
+                            tsFormatted,
+                            blackListElement.first
+                        )
+                    }
+                )
+            )
+
+        getSheets()
+            .spreadsheets()
+            .values()
+            .append(blackListSpreadsheetId, blackListSheetName, valuesRange)
+            .setValueInputOption("USER_ENTERED")
+            .execute()
     }
 
 }

@@ -36,29 +36,33 @@ class GorbushkaBot(
     override fun consume(update: Update) {
         log.debug { "Handle $update" }
 
-        val (chatId, from) = when {
-            update.hasMessage() -> update.message.chatId to update.message.from
-            update.hasCallbackQuery() -> update.callbackQuery.message.chatId to update.callbackQuery.from
+        val (chat, from) = when {
+            update.hasMessage() -> update.message.chat to update.message.from
+            update.hasCallbackQuery() -> update.callbackQuery.message.chat to update.callbackQuery.from
             else -> return
+        }
+
+        if (chat.type != "private") {
+            return
         }
 
         if (checkInBlackList(from.id)) {
             log.debug { "User $from is blacklisted" }
-            telegramClient.sendMessage(chatId, "Вы находитесь в черном списке")
+            telegramClient.sendMessage(chat.id, "Вы находитесь в черном списке")
             return
         }
 
         if (checkIsAdmin(from.id)) {
             if (update.hasMessage()) {
-                adminUpdateHandler.handleMessage(telegramClient, chatId, update.message)
+                adminUpdateHandler.handleMessage(telegramClient, chat.id, update.message)
             } else {
-                adminUpdateHandler.handleCallbackQuery(telegramClient, chatId, update.callbackQuery)
+                adminUpdateHandler.handleCallbackQuery(telegramClient, chat.id, update.callbackQuery)
             }
         } else {
             if (update.hasMessage()) {
-                userUpdateHandler.handleMessage(telegramClient, chatId, update.message)
+                userUpdateHandler.handleMessage(telegramClient, chat.id, update.message)
             } else {
-                userUpdateHandler.handleCallbackQuery(telegramClient, chatId, update.callbackQuery)
+                userUpdateHandler.handleCallbackQuery(telegramClient, chat.id, update.callbackQuery)
             }
         }
     }

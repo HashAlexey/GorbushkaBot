@@ -65,3 +65,6 @@ custom:
     approved-applications:
       spreadsheet-id: ${APPROVED_APPLICATIONS_SPREADSHEET_ID}
       sheet-name: ${APPROVED_APPLICATIONS_SHEET_NAME}
+    black-list:
+      spreadsheet-id: ${BLACK_LIST_SPREADSHEET_ID}
+      sheet-name: ${BLACK_LIST_SHEET_NAME}
