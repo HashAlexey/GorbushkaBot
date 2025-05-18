@@ -806,7 +806,7 @@ class AdminUpdateHandler(
 
         val newMessageId = telegramClient.sendMessage(
             chatId = mainChatId,
-            text = "Выберите категорию (лист) из таблицы:",
+            text = "Выберите категорию товаров, чтобы узнать актуальную цену:",
             replyMarkup = InlineKeyboardMarkup.builder()
                 .keyboard(
                     categories
