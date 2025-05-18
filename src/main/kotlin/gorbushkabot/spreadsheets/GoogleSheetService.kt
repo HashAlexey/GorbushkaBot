@@ -9,7 +9,6 @@ import com.google.api.services.sheets.v4.model.ValueRange
 import com.google.auth.http.HttpCredentialsAdapter
 import com.google.auth.oauth2.ServiceAccountCredentials
 import gorbushkabot.db.UserApplicationEntity
-import gorbushkabot.formatPhone
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.io.Resource
 import org.springframework.stereotype.Service
@@ -69,20 +68,10 @@ class GoogleSheetService(
                 listOf(
                     listOf(
                         nowFormatted,
-                        "",
                         application.fio,
-                        formatPhone(application.phoneNumber),
-                        "",
+                        application.phoneNumber,
                         application.role,
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
                         application.officeNumber ?: "",
-                        "",
-                        "",
-                        "",
                         application.userId,
                         application.username ?: "Не указано"
                     )
@@ -110,40 +99,53 @@ class GoogleSheetService(
             .build()
     }
 
-    fun syncBlackList(blackList: List<Pair<Long, Instant>>) {
-        getSheets()
+    @Synchronized
+    fun syncBlackList(blackList: List<BlackListEntry>) {
+        val current = getSheets()
             .spreadsheets()
             .values()
-            .clear(blackListSpreadsheetId, blackListSheetName, ClearValuesRequest())
+            .get(blackListSpreadsheetId, "$blackListSheetName!A2")
             .execute()
+            .getValues()
+            ?: emptyList()
 
-        val valuesRange = ValueRange()
-            .setValues(
-                listOf(
-                    listOf(
-                        "Время",
-                        "ИД пользователя"
-                    )
-                ).plus(
-                    blackList.map { blackListElement ->
-                        val tsFormatted = blackListElement.second
-                            .atZone(ZoneId.of("Europe/Moscow"))
-                            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+        val new = blackList.map {
+            val timestampFormatted = it.timestamp
+                .atZone(ZoneId.of("Europe/Moscow"))
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
 
-                        return@map listOf(
-                            tsFormatted,
-                            blackListElement.first
-                        )
-                    }
-                )
+            return@map listOf(
+                timestampFormatted,
+                it.userId.toString(),
+                it.username
             )
+        }
 
         getSheets()
             .spreadsheets()
             .values()
-            .append(blackListSpreadsheetId, blackListSheetName, valuesRange)
+            .update(blackListSpreadsheetId, "$blackListSheetName!A2", ValueRange().setValues(new))
             .setValueInputOption("USER_ENTERED")
             .execute()
+
+        if (current.size > new.size) {
+            getSheets()
+                .spreadsheets()
+                .values()
+                .clear(
+                    blackListSpreadsheetId,
+                    "$blackListSheetName!A${1 + (current.size - new.size)}:Z",
+                    ClearValuesRequest()
+                )
+                .execute()
+        }
     }
+
+    class BlackListEntry(
+        val id: Long,
+        val timestamp: Instant,
+        val userId: Long,
+        val username: String
+    )
 
 }

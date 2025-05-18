@@ -11,7 +11,6 @@ import org.telegram.telegrambots.meta.api.methods.groupadministration.CreateChat
 import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember
 import org.telegram.telegrambots.meta.api.methods.groupadministration.UnbanChatMember
 import org.telegram.telegrambots.meta.api.methods.pinnedmessages.PinChatMessage
-import org.telegram.telegrambots.meta.api.methods.pinnedmessages.UnpinChatMessage
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessages
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery
 import org.telegram.telegrambots.meta.api.objects.User
@@ -137,17 +136,17 @@ class AdminUpdateHandler(
                 }
             }
             chatState == State.ADMIN_ADD -> {
-                if (message.contact != null) {
+                if (message.contact != null || message.forwardFrom != null) {
                     addAdminProcess(
                         telegramClient = telegramClient,
                         chatId = chatId,
                         editMessageId = chatEditMessageId,
-                        userId = message.contact.userId
+                        userId = message.contact?.userId ?: message.forwardFrom.id
                     )
 
                     deleteMessages = true
                 } else {
-                    val messageId = telegramClient.sendMessage(chatId, "Пожалуйста, пришлите контакт")
+                    val messageId = telegramClient.sendMessage(chatId, "Пожалуйста, пришлите контакт или перешлите сообщение")
                     addMessageToDelete(chatId, messageId)
                     deleteMessages = false
                 }
@@ -170,12 +169,12 @@ class AdminUpdateHandler(
                 }
             }
             chatState == State.BLACK_LIST_ADD -> {
-                if (message.contact != null) {
+                if (message.contact != null || message.forwardFrom != null) {
                     addToBlackListProcess(
                         telegramClient = telegramClient,
                         chatId = chatId,
                         editMessageId = chatEditMessageId,
-                        userId = message.contact.userId
+                        userId = message.contact?.userId ?: message.forwardFrom.id
                     )
 
                     deleteMessages = true
@@ -809,14 +808,20 @@ class AdminUpdateHandler(
             chatId = mainChatId,
             text = "Выберите категорию (лист) из таблицы:",
             replyMarkup = InlineKeyboardMarkup.builder()
-                .keyboard(categories.map {
-                    InlineKeyboardRow(
-                        InlineKeyboardButton.builder()
-                            .text(it.name)
-                            .url(it.href)
-                            .build()
-                    )
-                })
+                .keyboard(
+                    categories
+                        .chunked(2)
+                        .map { chunk ->
+                            InlineKeyboardRow(
+                                chunk.map {
+                                    InlineKeyboardButton.builder()
+                                        .text(it.name)
+                                        .url(it.href)
+                                        .build()
+                                }
+                            )
+                        }
+                )
                 .build()
         )
 
@@ -986,7 +991,7 @@ class AdminUpdateHandler(
     private fun addAdmin(telegramClient: TelegramClient, chatId: Long, editMessageId: Int?) {
         telegramClient.sendReplyInternal(
             chatId = chatId,
-            text = "Пожалуйста, пришлите пользователя как контакт",
+            text = "Пожалуйста, пришлите пользователя как контакт или перешлите сообщения от него",
             editMessageId = editMessageId,
             replyMarkup = InlineKeyboardMarkup.builder()
                 .keyboardRow(
@@ -1267,7 +1272,7 @@ class AdminUpdateHandler(
     private fun addToBlackList(telegramClient: TelegramClient, chatId: Long, editMessageId: Int?) {
         telegramClient.sendReplyInternal(
             chatId = chatId,
-            text = "Пожалуйста, пришлите пользователя как контакт",
+            text = "Пожалуйста, пришлите пользователя как контакт или перешлите сообщения от него",
             editMessageId = editMessageId,
             replyMarkup = InlineKeyboardMarkup.builder()
                 .keyboardRow(
@@ -1306,7 +1311,7 @@ class AdminUpdateHandler(
                 .keyboardRow(
                     InlineKeyboardRow(
                         InlineKeyboardButton.builder()
-                            .callbackData("black_list")
+                            .callbackData("black_list_1")
                             .text("↩\uFE0F Вернуться в чёрный список")
                             .build()
                     )
